@@ -1,0 +1,144 @@
+Data Processing with PySpark
+---------------------------
+lets say file format like below
+
+cust_id,prod_id,prod_desc,price,discount,profit%,sale_date
+001,'p01','hair conditioner',100,7,10,'04-04-2022'
+
+from pyspark.sql.types import StructType,StructField,IntegerType,StringType,DateType
+user_schema=StructType([ StructFiled(cust_id,IntegerType()),\
+						 StructFiled(prod_id,StringType()),\
+						 StructFiled(prod_desc,StringType()),\
+						 StructFiled(price,IntegerType()),\
+						 StructFiled(discount,IntegerType()),\
+						 StructFiled(profit,IntegerType()),\
+						 StructFiled(sale_date,DateType()),\
+						])
+df=spark.read.format('csv')
+			 .option('header",True)\
+			 .option('delimiter',',')\
+			 .option('schema',user_schema)\
+			 .load("File/location/huge_customer_file.csv)
+
+#calculating profit mean based on the customer
+df1=df.withColumn("avg_profit",groupby(df.cust_id).agg(mean(df.profit))
+
+#creating transformed field
+df2=df1.withColumn("cust_cat",when(df1.avg_profit>50,"Gold")\
+							  .when((df1.avg_profit<40)&& (df1.avg_profit>30) ,"Silver")\
+							  .otherwise("Bronz"))
+#Filter only Golde customer
+
+df2.filter(df2.cust_cat="Gold").show()
+
+
+ETL with Snowflake
+--------------------
+#snowflake file format
+
+create file format database.schema.my_csv_format
+  type = csv
+  field_delimiter = ','
+  skip_header = 1
+  empty_field_as_null = true
+		
+#create external stage
+
+create stage my_ext_stage
+  url='s3://load/files/'
+  credentials=(aws_key_id='123abc' aws_secret_key='456zxc');
+ 
+#writing into target table 
+
+COPY INTO database.schema.mytable
+  select $1,$2,concat($1,$2)
+  FROM @my_ext_stage/tutorials/dataloading/sales.csv
+  FILE_FORMAT = my_csv_format
+  MATCH_BY_COLUMN_NAME='CASE_INSENSITIVE';  
+		
+		
+		
+Databrics to airflow
+---------------------
+#Note: i dont have work experience with databrics with airflow but i do have experince with snowflake with Airflow.
+#But i am putting my knowledge here.
+
+from airflow import DAG
+from airflow.providers.apache.databricks.operators.databricks import DatabricksSubmitRunOperator
+from datetime import datetime
+
+# Define your default arguments
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'start_date': datetime(2024, 4, 5),
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
+}
+
+# Define your DAG
+dag = DAG(
+    'databricks_notebook_orchestration',
+    default_args=default_args,
+    description='Orchestrate Databricks notebooks with Airflow',
+    schedule_interval=None,
+)
+
+# Define the notebook task
+notebook_task = DatabricksSubmitRunOperator(
+    task_id='run_databricks_notebook',
+    databricks_conn_id='your_databricks_conn_id',  # specify the connection ID configured in Airflow for Databricks
+    new_cluster={
+        'spark_version': '7.3.x',
+        'node_type_id': 'Standard_D3_v2',
+        'num_workers': 2,
+    },
+    notebook_task={
+        'notebook_path': '/path/to/your/notebook',
+    },
+    dag=dag,
+)
+
+
+Databrics to snowflake connection
+------------------------------
+#read the data from files using the auto loader
+
+from pyspark.sql.functions import Row_number
+from pysprak.sql.window import Window
+
+#snowflake parameters
+
+options = {
+  "sfUrl": "<snowflake-url>",
+  "sfUser": user,
+  "sfPassword": password,
+  "sfDatabase": "<snowflake-database>",
+  "sfSchema": "<snowflake-schema>",
+  "sfWarehouse": "<snowflake-cluster>"
+}
+
+df = spark.readStream.format("cloudFiles") \
+  .option("cloudFiles.format", csv) \
+  .schema(<user defined schema>) \
+  .load("file/path/file_name.csv")
+  
+  
+#applying window function
+  window=window.partitionBy(dept).orderBy(sal)
+df2=df.withColumn("rank",rank()over(window))
+
+#Filtering only highest sal
+
+df3=df2.where(df2.rank=1)
+
+#writing in to the snowflake table
+spark.write \
+  .format("snowflake") \
+  .options(**options) \
+  .option("dbtable", "table_name") \
+  .save()
+  
+  
+  
